@@ -1,248 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Weather App</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notes</title>
 
-  <!-- =====================================================================
-       FAVICONS
-       svg  → modern browsers (scalable, supports dark mode)
-       ico  → legacy browsers and OS taskbars (16×16, 32×32, 48×48)
-       ===================================================================== -->
-  <link rel="icon" type="image/svg+xml" href="assets/favicon/favicon.svg" />
-  <link rel="icon" type="image/x-icon"  href="assets/favicon/favicon.ico" sizes="16x16 32x32 48x48" />
+  <!-- ── Favicon ─────────────────────────────────────────────────
+       SVG favicon: modern browsers (Chrome 80+, Firefox 83+, Safari 15+).
+       ICO  favicon: fallback for older browsers and Windows taskbar.
+       Both reference the same visual; ICO contains 16×16, 32×32, 48×48.
+  ──────────────────────────────────────────────────────────────── -->
+  <link rel="icon"     type="image/svg+xml" href="assets/favicon/favicon.svg">
+  <link rel="icon"     type="image/x-icon"  href="assets/favicon/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="shortcut icon"                 href="assets/favicon/favicon.ico">
 
-  <!-- =====================================================================
-       EXTERNAL DEPENDENCIES (CDN)
-       Load order matters: CSS before JS, Leaflet before our scripts.
-       ===================================================================== -->
+  <!-- Google Fonts — preconnect reduces DNS + TLS latency -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet"
+  >
 
-  <!-- Tabler Icons — outline icon set used throughout the UI -->
-  <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
-
-  <!-- Leaflet — interactive map in the Map tab -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-  <!-- App stylesheet -->
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css">
 </head>
-
 <body>
 
-  <!-- =====================================================================
-       #app — root container
-       The bg-* class is swapped dynamically by getBgClass() in constants.js
-       based on the current weather conditions of the displayed city.
-       ===================================================================== -->
-  <div id="app" class="bg-clear">
+  <!-- ══════════════════════════════════════════════════════════════
+       SIDEBAR — note list, search bar, language toggle, new-note btn
+       Desktop: fixed left column.
+       Mobile:  off-canvas drawer (slides in via .open class).
+  ══════════════════════════════════════════════════════════════ -->
+  <aside id="sidebar">
 
-    <!-- -----------------------------------------------------------------
-         TAB NAVIGATION
-         Three tabs: Weather | Compare | Map
-         The language toggle (EN / IT) is positioned at the far right
-         of the nav bar via margin-left: auto on .lang-toggle.
-         ----------------------------------------------------------------- -->
-    <nav class="nav-tabs" role="tablist" aria-label="App sections">
+    <!-- Sidebar header: app title + language toggle + new-note button -->
+    <div class="sidebar-head">
 
-      <button class="tab-btn active"
-              onclick="switchTab('weather')"
-              role="tab" aria-selected="true" aria-controls="tab-weather">
-        <i class="ti ti-cloud" aria-hidden="true"></i>
-        <span data-i18n="tab_weather">Weather</span>
-      </button>
+      <!-- App title; text updated by i18n.js -->
+      <span class="app-title" data-i18n="appTitle">Notes</span>
 
-      <button class="tab-btn"
-              onclick="switchTab('compare')"
-              role="tab" aria-selected="false" aria-controls="tab-compare">
-        <i class="ti ti-columns" aria-hidden="true"></i>
-        <span data-i18n="tab_compare">Compare</span>
-        <span id="badge-compare" class="tab-badge" aria-label="saved cities">0</span>
-      </button>
-
-      <button class="tab-btn"
-              onclick="switchTab('map')"
-              role="tab" aria-selected="false" aria-controls="tab-map">
-        <i class="ti ti-map" aria-hidden="true"></i>
-        <span data-i18n="tab_map">Map</span>
-        <span id="badge-map" class="tab-badge" aria-label="cities on map">0</span>
-      </button>
-
-      <!-- Language toggle — auto-detect on load, manual override saves to localStorage -->
+      <!-- Language toggle pill ─────────────────────────────────────
+           Auto-detect on first load (navigator.language).
+           Manual override persisted in localStorage under "notes_lang".
+           data-lang is read by app.js to call i18n.setLocale().
+      ──────────────────────────────────────────────────────────── -->
       <div class="lang-toggle" role="group" aria-label="Language">
-        <button class="lang-btn" id="btn-lang-en"
-                onclick="setLang('en')" aria-pressed="false">EN</button>
-        <button class="lang-btn" id="btn-lang-it"
-                onclick="setLang('it')" aria-pressed="false">IT</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="it">IT</button>
       </div>
 
-    </nav>
+      <!-- New note button (desktop sidebar) -->
+      <button id="btn-new" data-i18n-title="newNote" title="New note (Ctrl+N)">＋</button>
+
+    </div>
+
+    <!-- Live search input -->
+    <div class="search-wrap">
+      <input
+        id="search-input"
+        type="search"
+        data-i18n-placeholder="searchPlaceholder"
+        placeholder="Search…"
+        autocomplete="off"
+      >
+    </div>
+
+    <!-- Note list — items generated dynamically by renderList() in app.js -->
+    <div id="notes-list" role="list" aria-label="Notes"></div>
+
+    <!-- Shown by JS when search returns no results -->
+    <div id="empty-list" aria-live="polite" data-i18n="emptyList">No notes found.</div>
+
+  </aside>
 
 
-    <!-- =================================================================
-         WEATHER TAB
-         ================================================================= -->
-    <section id="tab-weather" class="tab-panel active"
-             role="tabpanel" aria-labelledby="tab-btn-weather">
+  <!-- Semi-transparent backdrop — closes the mobile sidebar on tap -->
+  <div id="overlay" role="presentation"></div>
 
-      <!-- Search bar, unit toggle, and Save button -->
-      <div class="header">
-        <div class="search-row">
 
-          <!-- City search with autocomplete dropdown -->
-          <div class="search-wrapper">
-            <input type="text"
-                   id="search-input"
-                   placeholder="Search city…"
-                   autocomplete="off"
-                   aria-label="Search city"
-                   aria-autocomplete="list"
-                   aria-controls="suggestions" />
-            <div id="suggestions" role="listbox" aria-label="City suggestions"></div>
-          </div>
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN — primary content area
+       Contains: mobile topbar, empty-state placeholder, editor.
+  ══════════════════════════════════════════════════════════════ -->
+  <main id="main">
 
-          <!-- Search submit -->
-          <button class="icon-btn" onclick="doSearch()"
-                  title="Search" aria-label="Search">
-            <i class="ti ti-search" aria-hidden="true"></i>
+    <!-- Mobile-only topbar: hamburger + title + new-note btn ──────
+         Hidden on desktop via CSS; shown at ≤ 680 px.
+    ──────────────────────────────────────────────────────────── -->
+    <div id="topbar">
+      <button id="btn-menu" data-i18n-title="openMenu" title="Open menu">
+        <!-- Hamburger icon — inline SVG; no external dependency -->
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3 5h14M3 10h14M3 15h14"
+                stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <span class="app-title" style="font-size:1.1rem" data-i18n="appTitle">Notes</span>
+
+      <!-- New note button (mobile topbar) — styled inline to stay self-contained -->
+      <button
+        id="btn-new-mobile"
+        data-i18n-title="newNote"
+        title="New note"
+        style="margin-left:auto;background:var(--accent);color:#fff;border:none;
+               border-radius:8px;width:30px;height:30px;font-size:1.2rem;
+               cursor:pointer;display:flex;align-items:center;justify-content:center;"
+      >＋</button>
+    </div>
+
+
+    <!-- Empty state — shown when no note is selected ─────────────
+         Hidden by JS when a note is opened (openNote()).
+    ──────────────────────────────────────────────────────────── -->
+    <div id="placeholder" aria-hidden="true">
+      <!-- Decorative note icon -->
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <rect x="8" y="10" width="40" height="36" rx="4"
+              stroke="currentColor" stroke-width="2"/>
+        <path d="M16 20h24M16 27h18M16 34h12"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p data-i18n="placeholderMsg">Select a note or create a new one</p>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         EDITOR AREA — visible when a note is open
+         Layout: toolbar → body → footer
+    ══════════════════════════════════════════════════════════ -->
+    <div id="editor-area">
+
+      <!-- Formatting toolbar ───────────────────────────────────
+           fmt-btn: data-fmt maps to document.execCommand() commands.
+           tag-option: data-tag maps to CSS colour classes.
+      ──────────────────────────────────────────────────────── -->
+      <div class="editor-toolbar" role="toolbar" aria-label="Formatting">
+
+        <!-- Group 1: inline text formatting -->
+        <div class="toolbar-group">
+          <button class="tb-btn fmt-btn" data-fmt="bold"
+                  data-i18n-title="btnBold" title="Bold">
+            <b data-i18n="btnBold">B</b>
           </button>
-
-          <!-- Geolocation -->
-          <button class="icon-btn" onclick="geoLocate()"
-                  title="Use my location" aria-label="Use my location">
-            <i class="ti ti-current-location" aria-hidden="true"></i>
+          <button class="tb-btn fmt-btn" data-fmt="italic"
+                  data-i18n-title="btnItalic" title="Italic">
+            <i data-i18n="btnItalic">I</i>
           </button>
-
-          <!-- Temperature unit toggle -->
-          <div class="unit-toggle" role="group" aria-label="Temperature unit">
-            <button class="unit-btn active" id="btn-c"
-                    onclick="setUnit('C')" aria-pressed="true">°C</button>
-            <button class="unit-btn" id="btn-f"
-                    onclick="setUnit('F')" aria-pressed="false">°F</button>
-          </div>
-
-          <!-- Save / Saved button (hidden until a city is loaded) -->
-          <button class="icon-btn save-btn" id="save-btn"
-                  onclick="toggleSave()"
-                  style="display:none"
-                  aria-label="Save this city">
-            <i class="ti ti-bookmark" aria-hidden="true"></i> Save
+          <button class="tb-btn fmt-btn" data-fmt="underline"
+                  data-i18n-title="btnUnder" title="Underline">
+            <u data-i18n="btnUnder">U</u>
           </button>
-
-        </div>
-      </div>
-
-      <!-- Dynamic content: welcome → loading → weather data -->
-      <div id="weather-content">
-        <!-- Initial welcome state — replaced by JS on first load -->
-        <div class="state-box">
-          <div class="state-icon">🌤</div>
-          <div class="state-title" data-i18n="welcome_title">Real-time weather</div>
-          <div class="state-sub" data-i18n="welcome_sub">
-            Search a city or use your location.
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-
-    <!-- =================================================================
-         COMPARE TAB
-         Entirely populated by renderCompare() in compare-map.js
-         ================================================================= -->
-    <section id="tab-compare" class="tab-panel"
-             role="tabpanel" aria-labelledby="tab-btn-compare">
-
-      <div class="compare-panel">
-        <div id="compare-content">
-          <!-- Initial empty state -->
-          <div class="compare-empty">
-            <div class="compare-empty-icon">🗂</div>
-            <div class="compare-empty-title" data-i18n="compare_empty_title">No saved cities</div>
-            <div class="compare-empty-sub" data-i18n="compare_empty_sub">
-              Search a city in the Weather tab and press Save to add it here.
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-
-    <!-- =================================================================
-         MAP TAB
-         The Leaflet map is initialised the first time this tab is opened.
-         ================================================================= -->
-    <section id="tab-map" class="tab-panel"
-             role="tabpanel" aria-labelledby="tab-btn-map">
-
-      <div class="map-panel">
-
-        <!-- Map canvas or empty-state message -->
-        <div class="map-container">
-          <div class="map-empty" id="map-empty">
-            <div style="font-size:36px;opacity:.45" aria-hidden="true">🗺</div>
-            <div data-i18n="map_empty">Save cities to see them on the map.</div>
-          </div>
-          <!-- Leaflet mounts here; hidden until at least one city is saved -->
-          <div id="leaflet-map" style="display:none" aria-label="Interactive map"></div>
         </div>
 
-        <!-- Textual list of saved cities below the map -->
-        <div class="map-saved-list" id="map-saved-list"></div>
+        <div class="toolbar-sep" role="separator"></div>
 
+        <!-- Group 2: lists -->
+        <div class="toolbar-group">
+          <button class="tb-btn fmt-btn" data-fmt="insertUnorderedList"
+                  data-i18n="btnBullet">• List</button>
+          <button class="tb-btn fmt-btn" data-fmt="insertOrderedList"
+                  data-i18n="btnOrdered">1. Num</button>
+        </div>
+
+        <div class="toolbar-sep" role="separator"></div>
+
+        <!-- Colour tag picker -->
+        <div class="tag-picker">
+          <span data-i18n="colorLabel">Color</span>
+          <!-- data-tag values match CSS classes tag-a/b/c/d/none -->
+          <div class="tag-option" data-tag="none" role="radio" aria-label="No colour" data-i18n-title="tagNone"></div>
+          <div class="tag-option" data-tag="a"    role="radio" aria-label="Indigo"    data-i18n-title="tagA"></div>
+          <div class="tag-option" data-tag="b"    role="radio" aria-label="Green"     data-i18n-title="tagB"></div>
+          <div class="tag-option" data-tag="c"    role="radio" aria-label="Amber"     data-i18n-title="tagC"></div>
+          <div class="tag-option" data-tag="d"    role="radio" aria-label="Pink"      data-i18n-title="tagD"></div>
+        </div>
+
+        <!-- Delete current note -->
+        <button id="btn-delete" data-i18n-title="btnDelete" title="Delete note">
+          🗑 <span data-i18n="btnDelete">Delete</span>
+        </button>
+
+      </div><!-- /editor-toolbar -->
+
+
+      <!-- Editor body: title input + rich-text content area -->
+      <div class="editor-body">
+
+        <!-- Title: plain text input with serif font -->
+        <input
+          id="note-title-input"
+          type="text"
+          data-i18n-placeholder="titlePlaceholder"
+          placeholder="Note title…"
+          autocomplete="off"
+          aria-label="Note title"
+        >
+
+        <!-- Content: contenteditable div for rich-text support.
+             data-placeholder is read by the CSS ::before pseudo-element
+             to render the placeholder text without extra JS. -->
+        <div
+          id="note-content-input"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Note content"
+          data-placeholder="Start writing…"
+        ></div>
+
+      </div><!-- /editor-body -->
+
+
+      <!-- Footer: last-modified date + word count (populated by JS) -->
+      <div class="editor-footer" aria-live="polite">
+        <span id="footer-date"></span>
+        <span id="footer-words"></span>
       </div>
 
-    </section>
+    </div><!-- /editor-area -->
 
-  </div><!-- /#app -->
+  </main><!-- /main -->
 
 
-  <!-- ===================================================================
-       EXTERNAL SCRIPTS
-       Leaflet and Chart.js must load before our own JS files.
-       =================================================================== -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-
-  <!-- ===================================================================
-       APP SCRIPTS
-       Load order is critical — each file depends on the one(s) before it:
-         i18n.js      → exposes t(), tDay(), setLang(), currentLang
-         api.js       → exposes fetchWeather(), searchCity(), reverseGeocode()
-         constants.js → exposes WMO_ICONS, wmoDesc(), getBgClass(), ALERT_THRESHOLDS
-         weather.js   → core logic; reads from i18n, api, constants
-         compare-map.js → Compare + Map panels; reads from weather + above
-   =================================================================== -->
+  <!-- ── Scripts ───────────────────────────────────────────────────
+       i18n.js must load first — scripts.js calls i18n.init() and i18n.t()
+       at initialisation time, so strings must be ready.
+  ──────────────────────────────────────────────────────────────── -->
   <script src="js/i18n.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/constants.js"></script>
-  <script src="js/weather.js"></script>
-  <script src="js/compare-map.js"></script>
-
-  <!-- ===================================================================
-       BOOT
-       Runs after all scripts are loaded.
-       Sets the initial language toggle state and syncs the UI.
-       =================================================================== -->
-  <script>
-    (function boot() {
-      /* Set the correct pressed state on the language buttons */
-      document.getElementById('btn-lang-en').classList.toggle('active', currentLang === 'en');
-      document.getElementById('btn-lang-it').classList.toggle('active', currentLang === 'it');
-
-      /* Apply translations to all static [data-i18n] elements on first load */
-      applyStaticTranslations();
-
-      /* Sync the search placeholder to the detected language */
-      document.getElementById('search-input').placeholder = t('search_placeholder');
-
-      /* Update the html[lang] attribute for accessibility */
-      document.documentElement.lang = currentLang;
-    })();
-  </script>
-
+  <script src="js/script.js"></script>
 </body>
 </html>
